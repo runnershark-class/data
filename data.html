@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="width=device-width, initial-scale=1.0" />
+  <title>Rainbow Six Siege Weapon Stats</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root{
+      --bg:#0f172a;
+      --panel:#111827;
+      --panel-2:#1f2937;
+      --text:#e5e7eb;
+      --muted:#9ca3af;
+      --ar:#3b82f6;
+      --smg:#10b981;
+      --ext:#f59e0b;
+      --grid:rgba(255,255,255,0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body{
+      margin:0;
+      background:linear-gradient(180deg,#0b1020,#111827 20%, #0f172a);
+      color:var(--text);
+      font-family:Arial, Helvetica, sans-serif;
+      padding:24px;
+    }
+
+    h1{
+      margin:0 0 8px;
+      font-size: clamp(26px, 3vw, 42px);
+    }
+
+    .sub{
+      margin:0 0 20px;
+      color:var(--muted);
+    }
+
+    .controls{
+      margin-bottom:18px;
+      display:flex;
+      align-items:center;
+      gap:12px;
+      flex-wrap:wrap;
+    }
+
+    button{
+      border:none;
+      background:linear-gradient(135deg,var(--ar),#60a5fa);
+      color:white;
+      font-weight:700;
+      padding:10px 18px;
+      border-radius:10px;
+      cursor:pointer;
+      box-shadow:0 8px 18px rgba(59,130,246,0.28);
+    }
+
+    button:hover{ filter: brightness(1.05); }
+
+    .chart-grid{
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap:20px;
+      margin-top:22px;
+    }
+
+    .card{
+      background:rgba(17,24,39,0.9);
+      border:1px solid rgba(255,255,255,0.08);
+      border-radius:16px;
+      padding:14px 14px 10px;
+      box-shadow:0 12px 34px rgba(0,0,0,0.22);
+    }
+
+    canvas{
+      width:100% !important;
+      height:340px !important;
+    }
+
+    .legend{
+      display:flex;
+      gap:16px;
+      flex-wrap:wrap;
+      margin-top:10px;
+      font-size:13px;
+      color:var(--muted);
+    }
+
+    .dot{
+      width:12px;height:12px;border-radius:50%;display:inline-block;vertical-align:middle;margin-right:6px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Rainbow Six Siege Weapon TTK</h1>
+  <p class="sub">Hardcoded sample data from your CSV, grouped by weapon type.</p>
+
+  <div class="controls">
+    <button id="toggleAverageBtn">Hide weapon type average</button>
+  </div>
+
+  <div class="card">
+    <canvas id="ttkChart"></canvas>
+  </div>
+
+  <div class="legend">
+    <span><i class="dot" style="background:var(--ar)"></i> AR</span>
+    <span><i class="dot" style="background:var(--smg)"></i> SMG</span>
+    <span><i class="dot" style="background:var(--ext)"></i> Ext.</span>
+  </div>
+
+  <div class="chart-grid">
+    <div class="card"><canvas id="rpmChart"></canvas></div>
+    <div class="card"><canvas id="capacityChart"></canvas></div>
+    <div class="card"><canvas id="ammoChart"></canvas></div>
+  </div>
+
+  <script>
+    const armorLabels = [
+      "1 armor",
+      "2 armor",
+      "3 armor",
+      "1 armor + rook",
+      "2 armor + rook",
+      "3 armor + rook"
+    ];
+
+    const typeColors = {
+      AR: "#3b82f6",
+      SMG: "#10b981",
+      Ext: "#f59e0b"
+    };
+
+    // Hardcoded representative data from the CSV.
+    // Each weapon uses the TTK values for the six armor states shown in the dataset.
+    const weapons = [
+      { name: "416-C CARBINE", type: "AR", rpm: 739, capacity: 25, ammo: 150, ttk: [244, 244, 244, 244, 325, 325] },
+      { name: "416-C CARBINE + EB", type: "Ext", rpm: 739, capacity: 25, ammo: 150, ttk: [162, 244, 244, 244, 244, 325] },
+
+      { name: "552 COMMANDO", type: "AR", rpm: 690, capacity: 30, ammo: 150, ttk: [174, 261, 261, 261, 261, 261] },
+      { name: "MP5", type: "SMG", rpm: 799, capacity: 30, ammo: 150, ttk: [300, 300, 375, 375, 375, 451] },
+      { name: "9x19VSN", type: "SMG", rpm: 749, capacity: 30, ammo: 150, ttk: [240, 240, 320, 320, 320, 320] },
+      { name: "9mm C1", type: "SMG", rpm: 575, capacity: 34, ammo: 136, ttk: [313, 313, 417, 417, 417, 417] },
+      { name: "9mm C1 + EB", type: "Ext", rpm: 575, capacity: 34, ammo: 136, ttk: [209, 313, 313, 313, 313, 417] },
+
+      { name: "M4", type: "AR", rpm: 750, capacity: 30, ammo: 150, ttk: [160, 160, 240, 240, 240, 240] },
+      { name: "MP5K", type: "SMG", rpm: 799, capacity: 30, ammo: 150, ttk: [225, 300, 300, 300, 375, 375] },
+      { name: "P90", type: "SMG", rpm: 968, capacity: 50, ammo: 150, ttk: [310, 310, 372, 372, 434, 434] },
+      { name: "SCORPION EVO 3 A1", type: "SMG", rpm: 1079, capacity: 40, ammo: 160, ttk: [278, 278, 334, 334, 334, 389] },
+
+      { name: "R4-C", type: "AR", rpm: 859, capacity: 25, ammo: 125, ttk: [210, 210, 210, 210, 210, 279] },
+      { name: "R4-C + EB", type: "Ext", rpm: 859, capacity: 25, ammo: 125, ttk: [140, 210, 210, 210, 210, 210] }
+    ];
+
+    function getClassAverages() {
+      const map = {
+        AR: [],
+        SMG: [],
+        Ext: []
+      };
+
+      const labels = armorLabels.length;
+
+      for (let i = 0; i < labels; i++) {
+        const arVals = weapons.filter(w => w.type === "AR").map(w => w.ttk[i]);
+        const smgVals = weapons.filter(w => w.type === "SMG").map(w => w.ttk[i]);
+        const extVals = weapons.filter(w => w.type === "Ext").map(w => w.ttk[i]);
+
+        map.AR.push(avg(arVals));
+        map.SMG.push(avg(smgVals));
+        map.Ext.push(avg(extVals));
+      }
+
+      return map;
+    }
+
+    function avg(arr) {
+      return arr.reduce((a, b) => a + b, 0) / arr.length;
+    }
+
+    const classAverages = getClassAverages();
+
+    const rawWeaponDatasets = [
+      { label: "416-C Carbine", data: weapons.find(w => w.name === "416-C CARBINE").ttk, borderColor: typeColors.AR, backgroundColor: "transparent", borderWidth: 2, pointRadius: 2 },
+      { label: "552 Commando", data: weapons.find(w => w.name === "552 COMMANDO").ttk, borderColor: typeColors.AR, backgroundColor: "transparent", borderWidth: 2, pointRadius: 2, borderDash: [6, 6] },
+      { label: "MP5", data: weapons.find(w => w.name === "MP5").ttk, borderColor: typeColors.SMG, backgroundColor: "transparent", borderWidth: 2, pointRadius: 2 },
+      { label: "9x19VSN", data: weapons.find(w => w.name === "9x19VSN").ttk, borderColor: typeColors.SMG, backgroundColor: "transparent", borderWidth: 2, pointRadius: 2, borderDash: [6, 6] },
+      { label: "416-C + EB", data: weapons.find(w => w.name === "416-C CARBINE + EB").ttk, borderColor: typeColors.Ext, backgroundColor: "transparent", borderWidth: 2, pointRadius: 2 },
+      { label: "9mm C1 + EB", data: weapons.find(w => w.name === "9mm C1 + EB").ttk, borderColor: typeColors.Ext, backgroundColor: "transparent", borderWidth: 2, pointRadius: 2, borderDash: [6, 6] }
+    ];
+
+    const avgDatasets = [
+      { label: "AR avg", data: classAverages.AR, borderColor: typeColors.AR, backgroundColor: "transparent", borderWidth: 3, pointRadius: 4 },
+      { label: "SMG avg", data: classAverages.SMG, borderColor: typeColors.SMG, backgroundColor: "transparent", borderWidth: 3, pointRadius: 4 },
+      { label: "Ext avg", data: classAverages.Ext, borderColor: typeColors.Ext, backgroundColor: "transparent", borderWidth: 3, pointRadius: 4 }
+    ];
+
+    let showAverages = true;
+
+    const ttkCtx = document.getElementById('ttkChart').getContext('2d');
+    let ttkChart = new Chart(ttkCtx, {
+      type: 'line',
+      data: {
+        labels: armorLabels,
+        datasets: [...rawWeaponDatasets, ...avgDatasets]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'nearest', intersect: false },
+        plugins: {
+          legend: { labels: { color: '#e5e7eb' } },
+          title: { display: true, text: 'TTK by armor state (all sample weapons + class averages)', color: '#e5e7eb' }
+        },
+        scales: {
+          x: {
+            ticks: { color: '#e5e7eb' },
+            grid: { color: 'rgba(255,255,255,0.08)' }
+          },
+          y: {
+            title: { display: true, text: 'TTK (ms)', color: '#e5e7eb' },
+            ticks: { color: '#e5e7eb' },
+            grid: { color: 'rgba(255,255,255,0.08)' }
+          }
+        }
+      }
+    });
+
+    function syncAverageToggle() {
+      const visible = showAverages ? [...rawWeaponDatasets, ...avgDatasets] : rawWeaponDatasets;
+      ttkChart.data.datasets = visible;
+      ttkChart.update();
+      const btn = document.getElementById('toggleAverageBtn');
+      btn.textContent = showAverages ? 'Hide weapon type average' : 'Show weapon type average';
+    }
+
+    document.getElementById('toggleAverageBtn').addEventListener('click', () => {
+      showAverages = !showAverages;
+      syncAverageToggle();
+    });
+
+    // Extra charts
+    const typeSummary = {
+      AR: { rpm: avg(weapons.filter(w => w.type === 'AR').map(w => w.rpm)),
+            capacity: avg(weapons.filter(w => w.type === 'AR').map(w => w.capacity)),
+            ammo: avg(weapons.filter(w => w.type === 'AR').map(w => w.ammo)) },
+
+      SMG: { rpm: avg(weapons.filter(w => w.type === 'SMG').map(w => w.rpm)),
+             capacity: avg(weapons.filter(w => w.type === 'SMG').map(w => w.capacity)),
+             ammo: avg(weapons.filter(w => w.type === 'SMG').map(w => w.ammo)) },
+
+      Ext: { rpm: avg(weapons.filter(w => w.type === 'Ext').map(w => w.rpm)),
+             capacity: avg(weapons.filter(w => w.type === 'Ext').map(w => w.capacity)),
+             ammo: avg(weapons.filter(w => w.type === 'Ext').map(w => w.ammo)) }
+    };
+
+    new Chart(document.getElementById('rpmChart'), {
+      type: 'bar',
+      data: {
+        labels: ['AR', 'SMG', 'Ext.'],
+        datasets: [{
+          label: 'Avg RPM',
+          data: [typeSummary.AR.rpm, typeSummary.SMG.rpm, typeSummary.Ext.rpm],
+          backgroundColor: [typeColors.AR, typeColors.SMG, typeColors.Ext],
+          borderRadius: 8
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          title: { display: true, text: 'Average RPM by weapon type', color: '#e5e7eb' }
+        },
+        scales: {
+          x: { ticks: { color: '#e5e7eb' }, grid: { display: false } },
+          y: { ticks: { color: '#e5e7eb' }, title: { display: true, text: 'RPM', color: '#e5e7eb' } }
+        }
+      }
+    });
+
+    new Chart(document.getElementById('capacityChart'), {
+      type: 'bar',
+      data: {
+        labels: ['AR', 'SMG', 'Ext.'],
+        datasets: [{
+          label: 'Avg Mag Capacity',
+          data: [typeSummary.AR.capacity, typeSummary.SMG.capacity, typeSummary.Ext.capacity],
+          backgroundColor: [typeColors.AR, typeColors.SMG, typeColors.Ext],
+          borderRadius: 8
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          title: { display: true, text: 'Average capacity by weapon type', color: '#e5e7eb' }
+        },
+        scales: {
+          x: { ticks: { color: '#e5e7eb' }, grid: { display: false } },
+          y: { ticks: { color: '#e5e7eb' }, title: { display: true, text: 'Rounds', color: '#e5e7eb' } }
+        }
+      }
+    });
+
+    new Chart(document.getElementById('ammoChart'), {
+      type: 'bar',
+      data: {
+        labels: ['AR', 'SMG', 'Ext.'],
+        datasets: [{
+          label: 'Avg Ammo Pool',
+          data: [typeSummary.AR.ammo, typeSummary.SMG.ammo, typeSummary.Ext.ammo],
+          backgroundColor: [typeColors.AR, typeColors.SMG, typeColors.Ext],
+          borderRadius: 8
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          title: { display: true, text: 'Average ammo reserve by weapon type', color: '#e5e7eb' }
+        },
+        scales: {
+          x: { ticks: { color: '#e5e7eb' }, grid: { display: false } },
+          y: { ticks: { color: '#e5e7eb' }, title: { display: true, text: 'Ammo', color: '#e5e7eb' } }
+        }
+      }
+    });
+
+    syncAverageToggle();
+  </script>
+</body>
+</html>
